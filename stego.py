@@ -16,9 +16,9 @@ def binary_to_text(binary_string):
 
 
 def encode_image(image_path, secret_text, output_path):
-    """Hides the secret text inside the image pixels."""
-    # Add our secret "stop sign" to the text so the decoder knows when to stop
-    secret_text += "====="
+    """Hides the secret text inside the image pixels with a safety signature."""
+    # Add 'STEG' at the front as a signature, and '=====' at the end as a stop sign
+    secret_text = "STEG" + secret_text + "====="
     binary_secret = text_to_binary(secret_text)
     data_len = len(binary_secret)
     data_index = 0
@@ -36,7 +36,6 @@ def encode_image(image_path, secret_text, output_path):
             if data_index < data_len:
                 r, g, b = pixels[x, y]
 
-                # Replace the least significant bit of each color channel
                 if data_index < data_len:
                     r = (r & 254) | int(binary_secret[data_index])
                     data_index += 1
@@ -58,7 +57,7 @@ def encode_image(image_path, secret_text, output_path):
 
 
 def decode_image(image_path):
-    """Extracts hidden text from an encoded image."""
+    """Extracts hidden text and checks for compression corruption."""
     try:
         img = Image.open(image_path).convert('RGB')
     except FileNotFoundError:
@@ -79,12 +78,17 @@ def decode_image(image_path):
     # Convert the massive binary string back to text
     extracted_text = binary_to_text(binary_data)
 
-    # Look for our stop sign and cut off the garbage data after it
+    # 1. The Sanity Check: Did the signature survive?
+    if not extracted_text.startswith("STEG"):
+        return "[-] Error: No hidden message found, or the image was compressed/corrupted by a messaging app."
+
+    # 2. Look for our stop sign and cut off the garbage data after it
     if "=====" in extracted_text:
-        clean_text = extracted_text.split("=====")[0]
+        # Split by the stop sign, take the first part, and remove the "STEG" signature
+        clean_text = extracted_text.split("=====")[0][4:]
         return clean_text
     else:
-        return "[-] No hidden message found (or it was corrupted)."
+        return "[-] Error: Message signature found, but the end of the message was corrupted."
 
 
 # --- Terminal Interface ---
